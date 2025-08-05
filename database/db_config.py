@@ -11,3 +11,5 @@ client = MongoClient(MONGO_URL)
 db = client["TaskScheduler"]
 
 user = db["user"]
+
+task = db['task']
