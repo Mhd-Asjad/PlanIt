@@ -13,8 +13,8 @@ load_dotenv()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/user/login")
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-ALOGORITHM = "HS256"
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = "HS256"    
 ACCESS_TOKEN_EXPIRE_MINUTES = 3600
 REFRESH_TOKEN_EXPIRE_DAY = 7
 
@@ -31,7 +31,7 @@ def create_access_token(data: dict , expires_delta: timedelta | None = None):
             "type" : "access"
             
         })
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALOGORITHM)
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def create_refresh_token(data: dict):
@@ -41,7 +41,7 @@ def create_refresh_token(data: dict):
             "exp": int(expire.timestamp()),
             "type": "refresh" 
         })
-    encoded_jwt = jwt.encode(to_encode , SECRET_KEY, algorithm=ALOGORITHM)
+    encoded_jwt = jwt.encode(to_encode , SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
 def get_user(email: EmailStr):
@@ -57,7 +57,7 @@ def get_user(email: EmailStr):
 
 def verify_token(token: str, credential_exception):
     try:
-        payload = jwt.decode(token , SECRET_KEY, algorithms=[ALOGORITHM])
+        payload = jwt.decode(token , SECRET_KEY, algorithms=[ALGORITHM])
         email: str = payload.get("sub")
         if email is None :
             raise credential_exception

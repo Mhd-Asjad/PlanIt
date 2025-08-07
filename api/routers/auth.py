@@ -1,18 +1,18 @@
 from fastapi import APIRouter , Depends , HTTPException , status , Request
 from fastapi.responses import JSONResponse
-from database.schemas.user import UserRegister , LoginRequest , TokenResponse , TokenData
+from database.schemas.user import UserRegister , LoginRequest
 from auth.hashing import hash_password , verify_password
 from auth.jwt_token import create_access_token
 from database.db_config import db , user
 from fastapi.security import OAuth2PasswordRequestForm
-from typing import Annotated 
+from typing import Annotated
 from pydantic import EmailStr
 from loguru import logger
 from .deps import current_user  
 from  auth.utils.otp_handler import get_otp , set_otp
 from auth.utils.counter import get_next_sequence
 from jose import JWTError , jwt
-from auth.jwt_token import SECRET_KEY , ALOGORITHM , ACCESS_TOKEN_EXPIRE_MINUTES, get_user, create_access_token, create_refresh_token
+from auth.jwt_token import SECRET_KEY , ALGORITHM , ACCESS_TOKEN_EXPIRE_MINUTES, get_user, create_access_token, create_refresh_token
 from datetime import timedelta
 router = APIRouter()
 
@@ -45,42 +45,43 @@ def register_user(request: UserRegister):
         )
         
 @router.post("/refresh")
-async def refresh_token(
-    request: Request
-  ):
+async def refresh_token(request: Request):
     try:
         refresh_token = request.cookies.get("refresh_token")
-        logger.info(f"refresh token from coockie : {refresh_token}")
         if not refresh_token:
             raise HTTPException(
-                status_code=401,
+                status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Refresh Token is missing"
             )
-            
-        payload = jwt.decode(refresh_token ,SECRET_KEY , algorithms=[ALOGORITHM])
+
+        payload = jwt.decode(refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(
-                status_code=403,
-                detail="invalid Token Type"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invalid Token Type"
             )
+
         email = payload.get("sub")
-        if not email :
+        if not email:
             raise HTTPException(status_code=403, detail="Invalid token")
-        
+
         user = get_user(email)
-        if not user :
+        if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        
-        new_access_token = create_access_token({"sub":email})
-        return {"status":201, "access_token": new_access_token, "token_type":"Bearer"}
+
+        new_access_token = create_access_token({"sub": email})
+        return {"access_token": new_access_token, "token_type": "Bearer"}
+
     except JWTError as e:
         raise HTTPException(
-            status_code=403,
-            detail=f"jwt refresh token error : {str(e)}"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"JWT error: {str(e)}"
         )
 
 @router.post('/sent-otp')
 def send_otp(email: EmailStr):
+    logger.info(f"using email to api/user/send-otp : {email}")
+    
     current_user = user.find_one({"email": email})
     if not current_user:
         raise HTTPException(
@@ -118,36 +119,40 @@ def login_with_otp(otp: str):
 @router.post('/login')
 async def login(request: Annotated[ OAuth2PasswordRequestForm , Depends()]):
     logger.info(f"created login : {request.username} , {request.password}")
-    valid_user = user.find_one({"email" : request.username})
-    if not valid_user :
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
+    try :
+        valid_user = user.find_one({"email" : request.username})
+        if not valid_user :
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid credentials")
 
-    if not verify_password(request.password , valid_user["password"]):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST , detail="password is incorrect")
-    
-    access_token_expires = timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(data={
-        "sub" : request.username},
-        expires_delta=access_token_expires
-    )
-    
-    response = JSONResponse(content={
-        "access_token": access_token,
-        "token_type": "Bearer"
-    })
-    refresh_token = create_refresh_token(data={"sub": request.username})
-    
-    response.set_cookie(
-        key="refresh_token",
-        value=refresh_token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        max_age=7*24*60*60
-    )
-    logger.info(f"this is refresh for access token ")
-    return response
+        if not verify_password(request.password , valid_user["password"]):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST , detail="password is incorrect")
 
+        access_token_expires = timedelta(ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(data={
+            "sub" : request.username},
+            expires_delta=access_token_expires
+        )
+        refresh_token = create_refresh_token(data={"sub": request.username})
+
+        response = JSONResponse(content={
+            "access_token": access_token,
+            "token_type": "Bearer"
+        })
+
+        response.set_cookie(
+            key="refresh_token",
+            value=refresh_token,
+            httponly=True,
+            secure=True,
+            samesite="lax",
+            max_age=7*24*60*60
+        )
+        logger.info(f"this is refresh for access token " , {refresh_token})
+        logger.info(f"response header data : {response.headers}")
+        return response
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
 @router.get('/me')
 def get_loggedin_user(current_user: Annotated[LoginRequest, Depends(current_user)]):
     

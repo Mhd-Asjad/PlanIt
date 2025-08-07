@@ -5,7 +5,7 @@ from api.routers.task import  router as task_router
 
 app = FastAPI()
 
-origins = ["http://localhost:5173"]
+origins = ["http://localhost:5173" , "https://planit-scheduler.vercel.app" , "https://api.planit.publicvm.com"]
 
 app.add_middleware(
     CORSMiddleware,
