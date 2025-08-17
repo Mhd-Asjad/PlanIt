@@ -6,10 +6,12 @@ from email.message import EmailMessage
 from loguru import logger
 import os
 from dotenv import load_dotenv
+import redis
+import json
 
 load_dotenv()
 
-stored_otp: dict = {}
+r = redis.Redis(host="localhost", port=6379, decode_responses=True)
 
 GMAIL_SENDER = os.getenv("GMAIL_SENDER")      
 GMAIL_APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
@@ -42,17 +44,24 @@ def sent_otp_email(recipient_email: str , otp: str):
 def set_otp(email: str , ttl: int = 300):
     otp = generate_otp()
     expiry_time =  time.time() + ttl
-    stored_otp[otp] = {
+    otp_data = {
         "otp" : otp,
         "email": email,
         "expiry_time": expiry_time,
     }
-    
+    r.setex(f"otp:{otp}",ttl, json.dumps(otp_data))
     sent_otp_email(email , otp)
-    return stored_otp[otp]
+    return otp_data
 
 def get_otp(otp: str):
-    entry = stored_otp.get(otp) 
-    if entry and time.time() < entry['expiry_time']:
-        return entry
+    data = r.get(f"otp:{otp}")
+    if not data:
+        return None
+    try :
+        otp_data = json.loads(data)
+    except json.JSONDecodeError:
+        return None
+ 
+    if int(time.time()) < otp_data["expiry_time"]:
+        return otp_data
     return None

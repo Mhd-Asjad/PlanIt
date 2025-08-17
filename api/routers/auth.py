@@ -14,22 +14,22 @@ from auth.utils.counter import get_next_sequence
 from jose import JWTError , jwt
 from auth.jwt_token import SECRET_KEY , ALGORITHM , ACCESS_TOKEN_EXPIRE_MINUTES, get_user, create_access_token, create_refresh_token
 from datetime import timedelta
+from pymongo.errors import DuplicateKeyError
 router = APIRouter()
 
 # /api/user/register
 @router.post("/register")
 def register_user(request: UserRegister):
-    logger.info(f"Registering user: {request.full_name}, {request.email} {request.password}")
+    
+    email = request.email.strip().lower()
+    existing_email = user.find_one({'email': email})
+
+    if existing_email:
+        raise HTTPException(status_code=400 , detail="Email already exists")
     try:
-        # find email already registered or not
-        existing_email = user.find_one({'email': request.email})
-        if existing_email :
-            return HTTPException(
-                status_code=400 , detail="Email already exists"
-            )
         hashed_pass = hash_password(request.password)
-        # create user object
         user_id = get_next_sequence("user_id")
+        # create user object
         user_data = {
             "id" : user_id,
             "full_name": request.full_name,
@@ -100,6 +100,7 @@ def login_with_otp(otp: str):
     logger.info(f"stored_otp with data : {stored_otp}")
     if not stored_otp or stored_otp["otp"] != otp:
         raise HTTPException(400, "Invalid or expired OTP")
+    
     email = stored_otp["email"]
     user = get_user(email)
     if not user:
@@ -153,6 +154,7 @@ async def login(request: Annotated[ OAuth2PasswordRequestForm , Depends()]):
     except Exception as e:
         logger.error(f"Login error: {str(e)}")
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Internal server error: {str(e)}")
+    
 @router.get('/me')
 def get_loggedin_user(current_user: Annotated[LoginRequest, Depends(current_user)]):
     
